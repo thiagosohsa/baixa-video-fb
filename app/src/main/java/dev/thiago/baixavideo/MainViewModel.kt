@@ -103,7 +103,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _state.value = try {
                 val meta = Downloader.identify(getApplication(), url)
                 UiState.Ready(meta, loadThumb(meta.thumbnailUrl))
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // Throwable: falhas nativas/ligação de classe (Error) não podem derrubar o app.
                 if (e is CancellationException) throw e
                 UiState.Error(identifyError(e))
             }
@@ -121,7 +122,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     _state.value = UiState.Downloading(ready.meta, ready.thumb, p)
                 }
                 UiState.Done(name)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                // Throwable: falhas nativas/ligação de classe (Error) não podem derrubar o app.
                 if (e is CancellationException) throw e
                 UiState.Error(
                     if (!_online.value) "Sem internet. Conecte-se e tente de novo."
@@ -131,7 +133,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    private fun identifyError(e: Exception): String {
+    private fun identifyError(e: Throwable): String {
         val msg = e.message.orEmpty().lowercase()
         return when {
             !_online.value -> "Sem internet. Conecte-se e tente de novo."
