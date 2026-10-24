@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- seta para baixo -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M48,28h12v26h11L54,72 37,54h11z" />
+    <!-- bandeja -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,76h40v6H34z" />
+</vector>
