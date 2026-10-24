@@ -16,7 +16,11 @@ disponível abaixo disso quando o vídeo não tem 720p. Precisa de internet (Wi-
 
 - Extração e download: [yt-dlp](https://github.com/yt-dlp/yt-dlp) embarcado via
   [youtubedl-android](https://github.com/JunkFood02/youtubedl-android), com ffmpeg para
-  juntar áudio e vídeo. Seleção de formato: `-S res:720,ext:mp4:m4a`.
+  juntar áudio e vídeo.
+- Formato: primeiro tenta **H.264** (DASH até 720p ou o MP4 progressivo `hd` do Facebook,
+  cuja resolução só é conhecida depois de baixado e é conferida com `MediaMetadataRetriever`).
+  Se não bater com a melhor resolução até 720p, baixa com `-S res:720,vcodec:h264` em
+  qualquer codec (alguns Reels só existem em AV1).
 - O yt-dlp se atualiza sozinho em segundo plano (no máximo uma vez por dia), porque
   o Facebook muda o site com frequência.
 - O arquivo é baixado no cache do app e copiado para Downloads via `MediaStore`

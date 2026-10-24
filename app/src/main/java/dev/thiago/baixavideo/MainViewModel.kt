@@ -118,7 +118,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = UiState.Downloading(ready.meta, ready.thumb, 0f)
         job = viewModelScope.launch {
             _state.value = try {
-                val name = Downloader.download(getApplication(), url, ready.meta.title) { p ->
+                val name = Downloader.download(getApplication(), url, ready.meta) { p ->
                     _state.value = UiState.Downloading(ready.meta, ready.thumb, p)
                 }
                 UiState.Done(name)

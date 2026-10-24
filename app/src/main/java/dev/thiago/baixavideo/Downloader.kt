@@ -2,6 +2,7 @@ package dev.thiago.baixavideo
 
 import android.content.ContentValues
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
@@ -26,7 +27,17 @@ data class VideoMeta(
 object Downloader {
 
     // Até 720p; se o vídeo não tiver 720p, pega a maior resolução abaixo disso.
-    private const val FORMAT_SORT = "res:720,ext:mp4:m4a"
+    // Codec "no máximo H.264": evita AV1/VP9, que muitos players e o WhatsApp não abrem.
+    private const val FORMAT_SORT = "res:720,vcodec:h264,ext:mp4:m4a"
+
+    // H.264 até 720p via DASH, senão o MP4 progressivo "hd" do Facebook (H.264 + áudio).
+    private const val H264_FORMAT = "bv*[vcodec^=avc][height<=720]+ba/b[vcodec^=avc][height<=720]/hd"
+
+    // O Facebook prefixa o título com contadores: "1.9M views · 48K reactions | ...".
+    private val COUNTERS_PREFIX = Regex(
+        """^[^|]*\b(views|visualizações|reactions|reações)\b[^|]*\|\s*""",
+        RegexOption.IGNORE_CASE,
+    )
     private const val UPDATE_INTERVAL_MS = 24L * 60 * 60 * 1000
 
     private val initLock = Mutex()
@@ -60,7 +71,8 @@ object Downloader {
         }
         val info = YoutubeDL.getInfo(request)
         VideoMeta(
-            title = info.title?.takeIf { it.isNotBlank() } ?: "Vídeo do Facebook",
+            title = info.title?.replace(COUNTERS_PREFIX, "")?.trim()?.takeIf { it.isNotBlank() }
+                ?: "Vídeo do Facebook",
             thumbnailUrl = info.thumbnail,
             // "720p" = menor dimensão, assim vídeos verticais (Reels) também contam certo.
             height = listOf(info.width, info.height).filter { it > 0 }.minOrNull() ?: 0,
@@ -71,35 +83,56 @@ object Downloader {
     suspend fun download(
         context: Context,
         url: String,
-        title: String,
+        meta: VideoMeta,
         onProgress: (Float) -> Unit,
     ): String = withContext(Dispatchers.IO) {
         prepare(context)
-        val workDir = File(context.cacheDir, "download").apply {
-            deleteRecursively()
-            mkdirs()
+        val workDir = File(context.cacheDir, "download")
+        try {
+            // 1ª tentativa: H.264 (abre em qualquer lugar). O "hd" progressivo do Facebook não
+            // informa a resolução, então ela é conferida depois de baixado.
+            val h264 = runCatching { fetch(url, workDir, onProgress) { addOption("-f", H264_FORMAT) } }
+                .getOrNull()
+                ?.takeIf { meta.height <= 0 || shortSide(it) == meta.height }
+            // 2ª: a melhor até 720p em qualquer codec (alguns vídeos só existem em AV1).
+            val file = h264 ?: fetch(url, workDir, onProgress) { addOption("-S", FORMAT_SORT) }
+            saveToDownloads(context, file, fileName(meta.title, file.extension))
+        } finally {
+            workDir.deleteRecursively()
         }
+    }
+
+    private fun fetch(
+        url: String,
+        workDir: File,
+        onProgress: (Float) -> Unit,
+        format: YoutubeDLRequest.() -> Unit,
+    ): File {
+        workDir.deleteRecursively()
+        workDir.mkdirs()
+        onProgress(0f)
         val request = YoutubeDLRequest(url).apply {
             addOption("--no-playlist")
             addOption("--no-mtime")
-            addOption("-S", FORMAT_SORT)
+            format()
             addOption("--merge-output-format", "mp4")
             addOption("-o", File(workDir, "video.%(ext)s").absolutePath)
         }
         YoutubeDL.execute(request, null) { progress, _, _ ->
             if (progress >= 0f) onProgress(progress / 100f)
         }
-
-        val file = workDir.listFiles()
+        return workDir.listFiles()
             ?.filter { it.isFile && !it.name.endsWith(".part") }
             ?.maxByOrNull { it.length() }
             ?: error("Arquivo baixado não encontrado")
+    }
 
-        try {
-            saveToDownloads(context, file, fileName(title, file.extension))
-        } finally {
-            workDir.deleteRecursively()
-        }
+    /** Menor dimensão do vídeo (o "p" de 720p), lida do próprio arquivo. */
+    private fun shortSide(file: File): Int = MediaMetadataRetriever().use { r ->
+        r.setDataSource(file.absolutePath)
+        val w = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+        val h = r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+        minOf(w, h)
     }
 
     private fun saveToDownloads(context: Context, file: File, name: String): String {
