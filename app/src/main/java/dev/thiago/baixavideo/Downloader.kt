@@ -62,7 +62,8 @@ object Downloader {
         VideoMeta(
             title = info.title?.takeIf { it.isNotBlank() } ?: "Vídeo do Facebook",
             thumbnailUrl = info.thumbnail,
-            height = info.height,
+            // "720p" = menor dimensão, assim vídeos verticais (Reels) também contam certo.
+            height = listOf(info.width, info.height).filter { it > 0 }.minOrNull() ?: 0,
         )
     }
 

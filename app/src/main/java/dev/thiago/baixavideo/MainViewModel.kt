@@ -66,6 +66,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Texto vindo do "Compartilhar", da área de transferência ou digitado. */
     fun receive(text: String) {
+        if (_state.value is UiState.Downloading) return
         val url = extractUrl(text)
         _link.value = url ?: text.trim()
         if (url != null) identify(url) else if (text.isBlank()) reset()
